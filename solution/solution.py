@@ -1,54 +1,89 @@
-# Part №1 - read the data from the source file, convert it, and fill in the coordinate lists. 
-myfile=open('data/data023.txt','r')
-x_list = []
-y_list = []
-N = 0   # Number of points
-i = 0   # The loop variable
-for u in myfile:
-    p = u.split()
-    if p[0] == '(*':    # If the string starts with "(*", it is skipped,
-        continue        # the cycle continues
-    else:
-        r = u.split('***')    # Divide the data rows by "***"
-        r[0] = r[0].split()    # Divide the parts of the lines with coordinates by spaces
-        r[1] = r[1].split()
-        xnf_list = r[0][2].split(']')   # Separation of the abscissa of the row list
-        ynf_list = r[1][2].split(']')   # Separating the ordinates of the row list
-        x_list.append(float(xnf_list[0]))   # Filling in the abscess list
-        y_list.append(float(ynf_list[0]))   # Filling out the list of ordinates
-        Nni_list = r[0][0].split('(')   # Converting a list to highlight the number of points
-        Nni_list = Nni_list[1].split(')')
-        N = int(Nni_list[0])
-myfile.close()
-############################################
-# Part #2 - based on the data obtained in part #1, we create a new .csv file for reading in Mathcad
-mathfile = open('data/mathdata.csv','w')
-for i in range(N):
-    u=str(x_list[i]) + ';' + str(y_list[i]) +'\n'
-    mathfile.write(u)
-mathfile.close()
-############################################
-# Part #3 - performing calculations of linear regression coefficients
-i=0     # The loop variable
-sumX = 0    # The sum of the abscissas
-sumY = 0    # The sum of ordinates
-sumXY = 0   # The sum of the product of the abscissa and ordinate
-sumXX = 0   # The sum of the squares of the abscissa
-a = 0   # The slope coefficient of the linear regression function
-b = 0   # Coefficient is a free term of a linear regression function
-sumX = sum(x_list)
-sumY = sum(y_list)
-for i in range(N):
-    sumXY += x_list[i]*y_list[i]
-    sumXX += x_list[i]**2
-a = ((sumX*sumY-N*sumXY)/(sumX**2-N*sumXX))
-b = ((sumY-a*sumX)/N)
-print('a =',a,'\nb =',b)    #Output the coefficients to the console
-############################################
-# Part #4 - Graph construction in python and its displa
+'''Module providing a plot functions'''
 from matplotlib import pyplot as plt
-lin=[a*x+b for x in x_list]
-plt.plot(x_list,y_list,'g*')
-plt.plot(x_list,lin)
-plt.grid()
-plt.show()
+
+DATA_FILEPATH = 'data/data023.txt'  # Fixed input data filepath.
+CSV_DATA_FILEPATH = 'data/data023.csv'  # Fixed output .csv data filepath.
+COMMENT_START_PATTERN = '(*'        # Comment lines in data file starts with this pattern.
+# Position constants for parsing lines.
+X_DATA_PART_POS = 0
+Y_DATA_PART_POS = 1
+VALUE_PART_POS = 1
+
+def read_point_lines(data_filepath, skip_line_pattern):
+    '''Read lines from filepath and return point lines and their number.'''
+    point_lines = []
+    points_number = 0
+
+    with open(data_filepath, mode='r', encoding='utf-8') as file:
+        for line in file:
+            part = line.split()
+            if part[0] == skip_line_pattern:
+                continue # Skip comments in data file.
+            point_lines.append(line)
+            points_number += 1
+
+    return point_lines, points_number
+
+def process_point_lines(point_lines):
+    '''Process point lines list to get returned two lists with X and Y coordinates.'''
+    x_list = []
+    y_list = []
+
+    for line in point_lines:
+        line_list = [unit.strip(' []\n')for unit in line.split('***')]
+        x_list.append(float(line_list[X_DATA_PART_POS].split('=')[VALUE_PART_POS].strip()))
+        y_list.append(float(line_list[Y_DATA_PART_POS].split('=')[VALUE_PART_POS].strip()))
+
+    return zip(x_list, y_list)
+
+def make_csv_data_file(data_filepath, coordinates_zip, points_number):
+    '''Make data file with points coordinates and .csv extention'''
+    x_list, y_list = zip(*coordinates_zip) # Unzip data.
+
+    with open(data_filepath, mode='w', encoding='utf-8') as file:
+        for i in range(points_number):
+            file.write(f'{x_list[i]};{y_list[i]}\n')
+
+def calc_slr_func_coefs(coordinates_zip, points_number):
+    '''Calculate linear regression function and return a and b values.'''
+    x_list, y_list = zip(*coordinates_zip) # Unzip data.
+    xy_sum = 0
+    xx_sum = 0
+
+    # Preparatory calculations.
+    x_sum = sum(x_list)
+    y_sum = sum(y_list)
+    for i in range(points_number):
+        xy_sum += x_list[i]*y_list[i]
+        xx_sum += x_list[i]**2
+
+    # Main calculations.
+    a = (x_sum*y_sum - points_number*xy_sum)/(x_sum**2 - points_number*xx_sum)
+    b = (y_sum - a*x_sum)/points_number
+
+    return a, b
+
+def make_plot(data_filepath, coordinates_zip, lr_coefs):
+    '''Make plot with data points and linear regression'''
+    x_list, y_list = zip(*coordinates_zip) # Unzip data.
+    a, b = lr_coefs
+    lr_func = [(a*x + b) for x in x_list]
+    legend = [f'{data_filepath}', f'y = {a:.3f}x + {b:.3f} (a = {a:.3f}, b = {b:.3f})']
+
+    plt.figure(label='simple-linear-regression')
+    plt.title('Data points and their linear regression')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.plot(x_list, y_list, 'g.')
+    plt.plot(x_list, lr_func, 'r')
+    plt.grid(which='major')
+    plt.grid(which='minor', alpha=0.2)
+    plt.minorticks_on()
+    plt.legend(legend)
+    plt.show()
+
+if __name__ == '__main__':
+    points, n = read_point_lines(DATA_FILEPATH, COMMENT_START_PATTERN)
+    make_csv_data_file(CSV_DATA_FILEPATH, process_point_lines(points), n)
+    lr = calc_slr_func_coefs(process_point_lines(points), n)
+    make_plot(DATA_FILEPATH, process_point_lines(points), lr)
